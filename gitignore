@@ -1,0 +1,87 @@
+# =============================================================================
+# .gitignore for rnaseq-pipeline
+# =============================================================================
+
+# --- Personal config (paths are machine-specific — never commit) ---
+config/config.sh
+
+# --- Raw sequencing data ---
+# FASTQ files can be large (GB each) and may contain identifiable human data.
+# Store on Seven Bridges, S3, or a local server — not in the repo.
+*.fastq.gz
+*.fastq
+*.fq.gz
+*.fq
+
+# --- Alignment outputs ---
+*.bam
+*.bai
+*.cram
+*.crai
+*.sam
+
+# --- Large reference files ---
+# Downloaded by scripts/download_references.sh or .devcontainer/setup.sh.
+# Do not commit — they are ~GB in size and re-downloadable from Ensembl.
+*.fa
+*.fa.gz
+*.fasta
+*.fasta.gz
+*.gtf
+*.gtf.gz
+*.gff
+*.gff.gz
+*.jar
+ref/
+
+# --- Pipeline results ---
+# All outputs are written to results/ at runtime.
+# Store final results in Seven Bridges, Synapse, Zenodo, or equivalent.
+results/
+
+# --- Salmon index ---
+*_index/
+salmon_index/
+
+# --- R session artifacts ---
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+
+# --- Python artifacts ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.env
+.venv/
+venv/
+env/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Temporary pipeline state files ---
+/tmp/
+*.tmp
+*.temp
+pair_meta_*.json
+sample_meta.json
+
+# --- OS / editor files ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Logs ---
+# Keep only the main pipeline log; ignore verbose per-tool logs
+*.log
+!results/pipeline.log

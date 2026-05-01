@@ -1,0 +1,124 @@
+{
+  "name": "RNA-Seq Pipeline",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+
+  // -------------------------------------------------------------------------
+  // Dev container features — pre-built components layered on the base image
+  // -------------------------------------------------------------------------
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    },
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "17",
+      "jdk": "ms"
+    },
+    "ghcr.io/devcontainers/features/conda:1": {
+      "version": "latest"
+    }
+  },
+
+  // -------------------------------------------------------------------------
+  // Runs once when the Codespace is first created.
+  // Installs Salmon, R/DESeq2/tximeta, Python packages, GSEA, and optionally
+  // downloads reference files. See .devcontainer/setup.sh for full details.
+  // -------------------------------------------------------------------------
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+
+  // -------------------------------------------------------------------------
+  // VS Code extensions installed automatically in every Codespace
+  // -------------------------------------------------------------------------
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // Python
+        "ms-python.python",
+        "ms-python.pylance",
+
+        // R
+        "REditorSupport.r",
+        "reditorsupport.r-lsp",
+
+        // Shell scripting
+        "timonwong.shellcheck",
+        "foxundermoon.shell-format",
+
+        // Data files
+        "mechatroner.rainbow-csv",
+        "GrapeCity.gc-excelviewer",
+
+        // Git & collaboration
+        "eamodio.gitlens",
+        "GitHub.vscode-pull-request-github",
+
+        // AI assistance
+        "anthropics.claude-code",
+
+        // Formatting
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "python.defaultInterpreterPath": "/opt/conda/bin/python",
+        "r.rpath.linux": "/usr/bin/Rscript",
+        "editor.formatOnSave": true,
+        "editor.rulers": [100],
+
+        // Hide large binary/output files from the file explorer
+        "files.exclude": {
+          "**/*.fastq.gz": true,
+          "**/*.fastq": true,
+          "**/*.bam": true,
+          "**/*.bai": true,
+          "results/salmon/**": true,
+          "ref/**": true
+        },
+
+        // Prevent VS Code from searching inside large output directories
+        "search.exclude": {
+          "**/results": true,
+          "**/ref": true,
+          "**/*.fastq.gz": true
+        }
+      }
+    }
+  },
+
+  // -------------------------------------------------------------------------
+  // Port forwarding — uncomment if running an R Shiny results viewer
+  // -------------------------------------------------------------------------
+  // "forwardPorts": [3838],
+
+  // -------------------------------------------------------------------------
+  // Codespace machine size recommendation.
+  // This pipeline is CPU and RAM intensive:
+  //   - Salmon index build: ~10 min on 4 cores, needs ~8 GB RAM
+  //   - Salmon quant per sample: ~5-15 min depending on depth
+  //   - DESeq2: fast, minimal RAM
+  //   - GSEA: ~2-5 min per run, needs Java heap ~8 GB
+  //
+  // Recommended: 16-core / 32 GB Codespace
+  // Create with:  gh codespace create --machine largePremiumLinux
+  // -------------------------------------------------------------------------
+  "hostRequirements": {
+    "cpus": 16,
+    "memory": "32gb",
+    "storage": "64gb"
+  },
+
+  // -------------------------------------------------------------------------
+  // Environment variables available to all terminals in the Codespace.
+  // These set sensible defaults; override in config/config.sh for your project.
+  // -------------------------------------------------------------------------
+  "remoteEnv": {
+    "THREADS": "4",
+    "OUTDIR": "/workspaces/rnaseq-pipeline/results",
+    "SAMPLESHEET": "/workspaces/rnaseq-pipeline/samplesheets/your_project.csv",
+    "REF_DIR": "/home/vscode/ref",
+    "SALMON_INDEX": "/home/vscode/ref/salmon_index",
+    "GTF": "/home/vscode/ref/genome.gtf",
+    "TRANSCRIPTOME_FA": "/home/vscode/ref/cdna.all.fa.gz",
+    "GSEA_JAR": "/home/vscode/tools/gsea/gsea-cli.jar",
+    "HALLMARK_GMT": "/home/vscode/ref/h.all.v2023.2.Hs.symbols.gmt"
+  }
+}

@@ -1,0 +1,39 @@
+Sample_ID,Treatment,Condition,Donor_ID,Timepoint,Batch,Notes
+# -----------------------------------------------------------------------
+# INSTRUCTIONS — delete all comment lines before running the pipeline
+#
+# Sample_ID  : Unique identifier for each sample.
+#              Must match your FASTQ filename prefix exactly.
+#              Example: if your files are ctrl_D1_R1.fastq.gz, use ctrl_D1
+#              No spaces. Hyphens and underscores are fine.
+#
+# Treatment  : What was applied to this sample.
+#              Must match exactly what you put in COMPARISONS in config.sh.
+#              Examples: Vehicle, DrugA, siRNA_KD, IgG, ABS-201
+#
+# Condition  : Role in the experiment.
+#              Use exactly "Control" for your baseline/reference group.
+#              Use any label (Group1, Group2, etc.) for treatment groups.
+#
+# Donor_ID   : Biological individual / replicate identifier.
+#              The pipeline runs each Donor_ID independently.
+#              Examples: D1, D2, Mouse3, CellLine_A
+#
+# Timepoint  : Optional. For time-course experiments.
+#              Examples: 6hr, 24hr, Day3
+#              Leave blank if not applicable.
+#
+# Batch      : Optional. For batch correction in downstream analysis.
+#              Leave blank if all samples were processed in one batch.
+#
+# Notes      : Optional free text. Ignored by the pipeline.
+# -----------------------------------------------------------------------
+ctrl_D1,Vehicle,Control,D1,,,
+drugA_D1,DrugA,Group1,D1,,,
+drugB_D1,DrugB,Group2,D1,,,
+ctrl_D2,Vehicle,Control,D2,,,
+drugA_D2,DrugA,Group1,D2,,,
+drugB_D2,DrugB,Group2,D2,,,
+ctrl_D3,Vehicle,Control,D3,,,
+drugA_D3,DrugA,Group1,D3,,,
+drugB_D3,DrugB,Group2,D3,,,
