@@ -1,32 +1,31 @@
-# Bulk RNA-Seq Pipeline
-### FASTQ → Salmon → DESeq2 → GSEA
-**Transcript-level quantification | Per-group differential expression | Hallmark pathway enrichment**
+# RNA-Seq Analysis Pipeline
+### Salmon → DESeq2 → GSEA | Per-Donor Paired Analysis | GRCh38 / Ensembl 115
+
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)]()
+[![Salmon](https://img.shields.io/badge/Salmon-1.10%2B-green)]()
+[![DESeq2](https://img.shields.io/badge/DESeq2-Bioconductor-red)]()
+[![GSEA](https://img.shields.io/badge/GSEA-PreRanked-orange)]()
 
 ---
 
 ## Overview
 
-A portable, reproducible bulk RNA-seq analysis pipeline for paired-end sequencing data. Designed to run on a local machine, HPC, cloud instance, or GitHub Codespaces with minimal configuration.
+Bulk RNA-seq pipeline for paired-end sequencing data. Produces per-donor differential expression and pathway enrichment results across any number of treatment vs. control comparisons.
 
 ```
 FASTQ (R1 / R2)
       │
       ▼
-Salmon quant          ← quasi-mapping, GC/seq bias correction, bootstrapped
+Salmon quant        ← transcript-level quantification, GC/seq bias correction
       │
       ▼
-tximeta → DESeq2      ← transcript → gene aggregation, differential expression
+tximeta → DESeq2    ← transcript → gene aggregation, per-donor DE analysis
       │
       ▼
-GSEA PreRanked        ← Wald stat ranking, MSigDB gene sets
+GSEA PreRanked      ← Wald stat ranking, MSigDB Hallmark gene sets
 ```
 
-**Key design principles:**
-- **Samplesheet-driven** — all sample metadata, groupings, and comparisons are defined in one CSV
-- **Idempotent** — safely re-runnable; completed steps are detected and skipped automatically
-- **Reference-agnostic** — works with any Ensembl genome release and any organism
-- **Comparison-flexible** — supports any number of treatment vs. control pairings
-- **Per-donor / per-replicate aware** — donors are never silently pooled; each is run independently
+**Key design:** donors are never pooled as replicates. Each donor runs independently — 4 donors × 3 comparisons = 12 DESeq2 outputs and 12 GSEA runs.
 
 ---
 
@@ -34,189 +33,203 @@ GSEA PreRanked        ← Wald stat ranking, MSigDB gene sets
 
 ```bash
 # 1. Clone
-git clone https://github.com/YOUR_USERNAME/rnaseq-pipeline.git
-cd rnaseq-pipeline
+git clone https://github.com/Capoinde/DEseq-2-and-GSEA-analysis.git
+cd DEseq-2-and-GSEA-analysis
 
-# 2. Configure (edit paths in one place)
+# 2. Install tools (see Platform Setup below)
+
+# 3. Configure
 cp config/config.template.sh config/config.sh
-nano config/config.sh
-
-# 3. Download reference files (one-time, ~10 min)
-bash scripts/download_references.sh --species human --release 115
+# Edit config/config.sh with your paths and comparisons
 
 # 4. Run
-bash pipeline/rnaseq_pipeline.sh 2>&1 | tee results/pipeline.log
+source config/config.sh
+bash pipeline/rnaseq_pipeline_salmon.sh 2>&1 | tee results/pipeline.log
 ```
 
 ---
 
-## Repository Structure
+## Platform Setup
 
-```
-rnaseq-pipeline/
-├── README.md
-├── .devcontainer/
-│   ├── devcontainer.json          ← GitHub Codespaces environment definition
-│   └── setup.sh                   ← auto-installs all tools + reference files
-├── config/
-│   ├── config.template.sh         ← copy to config.sh and fill in your paths
-│   └── config.sh                  ← gitignored — your local/project settings
-├── pipeline/
-│   └── rnaseq_pipeline.sh         ← main pipeline entry point
-├── r_scripts/
-│   └── run_deseq2.R               ← DESeq2 analysis (called by pipeline)
-├── python_scripts/
-│   └── make_rnk.py                ← DESeq2 output → GSEA ranked list converter
-├── scripts/
-│   ├── download_references.sh     ← one-time reference file downloader
-│   └── sb_submit.py               ← Seven Bridges batch job submission template
-├── samplesheets/
-│   ├── samplesheet_template.csv   ← blank template with column descriptions
-│   └── example_project.csv        ← working example with dummy data
-├── docker/
-│   └── Dockerfile                 ← for Seven Bridges / containerized runs
-├── tests/
-│   └── data/                      ← small example FASTQs for CI testing
-├── results/                       ← gitignored; all outputs written here at runtime
-└── .gitignore
+> **Full step-by-step instructions with error fixes and troubleshooting are in:**
+> `docs/RNAseq_MultiPlatform_Setup_Guide.docx`
+
+### Windows
+
+Windows requires WSL (Windows Subsystem for Linux) since bioinformatics tools are built for Linux.
+
+```powershell
+# Run in PowerShell as Administrator
+wsl --install
 ```
 
----
+After restart, open Ubuntu from the Start menu. All subsequent commands run inside the WSL terminal in VS Code (connect via the green >< button, bottom-left).
 
-## Samplesheet Format
-
-All sample metadata and comparison groupings are defined in a single CSV.
-Copy `samplesheets/samplesheet_template.csv` and fill in your values.
-
-### Required columns
-
-| Column | Description | Example |
-|--------|-------------|---------|
-| `Sample_ID` | Unique identifier — must match your FASTQ filename prefix exactly | `ctrl_donor1` |
-| `Treatment` | What was applied to this sample | `DrugA`, `Vehicle`, `siKD` |
-| `Condition` | Role in the experiment — `Control` or a group label | `Control`, `Group1` |
-| `Donor_ID` | Biological replicate or individual identifier | `D1`, `Mouse3` |
-
-### Optional columns (used if present)
-
-| Column | Description |
-|--------|-------------|
-| `Timepoint` | For time-course experiments |
-| `Batch` | For batch correction in downstream analysis |
-| `Notes` | Free text — ignored by the pipeline |
-
-### Example
-
-```csv
-Sample_ID,Treatment,Condition,Donor_ID
-ctrl_D1,Vehicle,Control,D1
-drugA_D1,DrugA,Group1,D1
-drugB_D1,DrugB,Group2,D1
-ctrl_D2,Vehicle,Control,D2
-drugA_D2,DrugA,Group1,D2
-drugB_D2,DrugB,Group2,D2
-ctrl_D3,Vehicle,Control,D3
-drugA_D3,DrugA,Group1,D3
-drugB_D3,DrugB,Group2,D3
-```
-
-### Defining comparisons
-
-Comparisons are specified in `config/config.sh` as a plain list.
-The pipeline runs every comparison for every unique `Donor_ID` in the samplesheet.
+**Critical Windows note:** FASTQ files must be copied into the Linux filesystem (`~/fastq_data/`) before running. Files accessed through `/mnt/c/` cause read errors.
 
 ```bash
-# Format: "TreatmentLabel,ControlLabel,OutputLabel"
-export COMPARISONS=(
-  "DrugA,Vehicle,DrugA_vs_Vehicle"
-  "DrugB,Vehicle,DrugB_vs_Vehicle"
-  "DrugA,DrugB,DrugA_vs_DrugB"
-)
+# Copy FASTQs from Windows to Linux filesystem
+mkdir -p ~/fastq_data
+find "/mnt/c/Users/YourName/path/to/fastq" \
+     -mindepth 2 -name "*.fastq" -not -name "*Zone*" | while read f; do
+    base=$(basename "$f")
+    sid=$(echo "$base" | sed 's/_S[0-9]*_L[0-9]*_R\([12]\)_001\.fastq//')
+    read_num=$(echo "$base" | grep -o '_R[12]_' | tr -d '_')
+    sid_hyphen=$(echo "$sid" | sed 's/_/-/g')
+    sudo cp "$f" ~/fastq_data/"${sid_hyphen}_${read_num}.fastq"
+    sudo chown $USER:$USER ~/fastq_data/"${sid_hyphen}_${read_num}.fastq"
+done
 ```
 
-With the example samplesheet above and 3 comparisons across 3 donors,
-the pipeline produces **9 DESeq2 outputs and 9 GSEA runs**.
+### macOS
+
+Terminal is natively Unix-based — no WSL needed.
+
+```bash
+# Install Homebrew
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install Java
+brew install openjdk@17
+echo 'export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Point `FASTQ_DIR` directly at your FASTQ location — no copying required on macOS.
+
+### Linux (Ubuntu/Debian)
+
+Native environment — most straightforward setup.
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git default-jdk python3 python3-pip wget unzip
+```
 
 ---
 
-## Configuration
+## Installing Tools (All Platforms)
+
+### Miniconda + Salmon
 
 ```bash
-# config/config.sh — the only file you need to edit
+# Install Miniconda (use MacOSX-arm64 version on Apple Silicon)
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh
+bash /tmp/miniconda.sh -b -p $HOME/miniconda3
+$HOME/miniconda3/bin/conda init bash   # use 'conda init zsh' on macOS
+source ~/.bashrc
 
-# Directory containing your FASTQ files
-# Files must be named:  <Sample_ID>_R1.fastq.gz  and  <Sample_ID>_R2.fastq.gz
-export FASTQ_DIR="/path/to/your/fastq"
+# Accept Terms of Service
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
 
-# Where all pipeline outputs will be written
-export OUTDIR="./results"
+# Install Salmon
+conda install -y -c bioconda -c conda-forge salmon
+salmon --version
+```
 
-# Your completed samplesheet
-export SAMPLESHEET="./samplesheets/your_project.csv"
+### R + DESeq2
 
-# Reference files — populated by scripts/download_references.sh
-export TRANSCRIPTOME_FA="/ref/cdna.all.fa.gz"
-export GTF="/ref/genome.gtf"
-export SALMON_INDEX="/ref/salmon_index"
+```bash
+# Write to file to avoid bash special character issues with the ! operator
+cat > /tmp/install_r_packages.R << 'EOF'
+options(repos = c(CRAN = 'https://cloud.r-project.org'))
+lib_path <- file.path(Sys.getenv('HOME'), 'R', 'library')
+dir.create(lib_path, recursive = TRUE, showWarnings = FALSE)
+.libPaths(c(lib_path, .libPaths()))
+if (!requireNamespace('BiocManager', quietly = TRUE))
+    install.packages('BiocManager', lib = lib_path)
+BiocManager::install(
+    c('DESeq2','tximeta','tximport','GenomicFeatures'),
+    lib = lib_path, ask = FALSE, update = FALSE)
+install.packages(c('jsonlite','ggplot2','ggrepel','pheatmap'), lib = lib_path)
+message('R packages done')
+EOF
+Rscript /tmp/install_r_packages.R
+echo 'export R_LIBS_USER="$HOME/R/library"' >> ~/.bashrc && source ~/.bashrc
+```
 
-# Gene set database for GSEA — any .gmt from MSigDB works
-export HALLMARK_GMT="/ref/h.all.v2023.2.Hs.symbols.gmt"
+### GSEA + Reference Files
 
-# GSEA CLI jar (downloaded by setup.sh or manually)
-export GSEA_JAR="/tools/gsea/gsea-cli.jar"
+```bash
+# GSEA jar
+mkdir -p ~/tools/gsea
+wget 'https://data.broadinstitute.org/gsea-msigdb/gsea/software/desktop/4.3/GSEA_Linux_4.3.3.zip' \
+     -O /tmp/gsea.zip
+unzip -j /tmp/gsea.zip '*/gsea-cli.jar' -d ~/tools/gsea/
 
-# Comparisons: "Treatment,Control,OutputLabel"
-export COMPARISONS=(
-  "DrugA,Vehicle,DrugA_vs_Vehicle"
-  "DrugB,Vehicle,DrugB_vs_Vehicle"
-)
+# Reference files
+mkdir -p ~/ref
+wget 'https://ftp.ensembl.org/pub/release-115/fasta/homo_sapiens/cdna/Homo_sapiens.GRCh38.cdna.all.fa.gz' \
+     -O ~/ref/cdna.all.fa.gz
+wget 'https://ftp.ensembl.org/pub/release-115/gtf/homo_sapiens/Homo_sapiens.GRCh38.115.gtf.gz' \
+     -O ~/ref/genome.gtf.gz && gunzip ~/ref/genome.gtf.gz
+wget 'https://data.broadinstitute.org/gsea-msigdb/msigdb/release/2023.2.Hs/h.all.v2023.2.Hs.symbols.gmt' \
+     -O ~/ref/h.all.v2023.2.Hs.symbols.gmt
 
-# Set to "false" for single-end data
-export PAIRED_END="true"
-
-# CPU threads
-export THREADS="16"
+# Build Salmon index (one-time, ~10 minutes)
+salmon index --transcripts ~/ref/cdna.all.fa.gz \
+             --index ~/ref/salmon_index --threads 4
 ```
 
 ---
 
 ## FASTQ Naming Convention
 
+The pipeline matches filenames to `Sample_ID` values in your samplesheet.
+
 ```
-<Sample_ID>_R1.fastq.gz
-<Sample_ID>_R2.fastq.gz
+# Required format
+<Sample_ID>_R1.fastq         uncompressed paired-end R1
+<Sample_ID>_R1.fastq.gz      gzip compressed
+<Sample_ID>_R2.fastq         paired-end R2
+
+# Absci internal format — auto-detected by organize_fastqs.py
+<Sample_ID>_S<N>_L<N>_R1_001.fastq
+Example: seqRNA49_HF_CUT_26_010_6hr_IgG_S1_L001_R1_001.fastq
 ```
 
-`Sample_ID` must match the `Sample_ID` column in your samplesheet exactly.
-Avoid spaces and special characters — use underscores or hyphens.
-
-**Single-end data:** set `PAIRED_END="false"` in `config.sh`.
-The pipeline adjusts Salmon flags automatically.
+The `organize_fastqs.py` script handles hyphen-to-underscore conversion automatically between samplesheet Sample_IDs and actual filenames.
 
 ---
 
-## Downloading Reference Files
+## Samplesheet Format
+
+| Column | Description |
+|--------|-------------|
+| `Sample_ID` | Must match FASTQ filename prefix exactly. No spaces. |
+| `Treatment` | Must match values used in `COMPARISONS_STR` exactly. |
+| `Condition` | Use `Control` for baseline; `Group1`, `Group2` etc for treatments. |
+| `Donor_ID` | Individual identifier — each donor runs independently. |
+
+---
+
+## Configuration
 
 ```bash
-# Human GRCh38 / Ensembl 115
-bash scripts/download_references.sh --species human --release 115
-
-# Mouse GRCm39 / Ensembl 112
-bash scripts/download_references.sh --species mouse --release 112
-
-# Any organism — provide Ensembl FTP URLs directly
-bash scripts/download_references.sh \
-  --cdna-url "https://ftp.ensembl.org/.../your_organism.cdna.all.fa.gz" \
-  --gtf-url  "https://ftp.ensembl.org/.../your_organism.gtf.gz"
+cp config/config.template.sh config/config.sh
 ```
 
-MSigDB gene sets by organism (download from https://www.gsea-msigdb.org/gsea/msigdb/):
+Key settings in `config/config.sh`:
 
-| Organism | Recommended GMT |
-|----------|----------------|
-| Human | `h.all.v2023.2.Hs.symbols.gmt` |
-| Mouse | `h.all.v2023.2.Mm.symbols.gmt` |
-| Rat | Use human orthologs or C2/C5 collections |
+```bash
+export FASTQ_DIR="/home/username/fastq_data"      # Windows/Linux
+# export FASTQ_DIR="/Users/username/fastq_data"  # macOS
+
+export OUTDIR="$(pwd)/results"
+export SAMPLESHEET="$(pwd)/samplesheets/my_project.csv"
+export TRANSCRIPTOME_FA="$HOME/ref/cdna.all.fa.gz"
+export GTF="$HOME/ref/genome.gtf"
+export SALMON_INDEX="$HOME/ref/salmon_index"
+export HALLMARK_GMT="$HOME/ref/h.all.v2023.2.Hs.symbols.gmt"
+export GSEA_JAR="$HOME/tools/gsea/gsea-cli.jar"
+export THREADS="8"
+
+# Use COMPARISONS_STR (plain string) — NOT a bash array
+export COMPARISONS_STR="ABS-201,IgG,ABS201_vs_IgG|||IgG+PRL,IgG,IgGPRL_vs_IgG|||ABS201+PRL,IgG+PRL,ABS201PRL_vs_IgGPRL"
+```
+
+> **Always use `COMPARISONS_STR`** with `|||` separators, not a bash array. Bash arrays cannot be exported between scripts and cause `COMPARISONS is empty` errors.
 
 ---
 
@@ -226,109 +239,74 @@ MSigDB gene sets by organism (download from https://www.gsea-msigdb.org/gsea/msi
 results/
 ├── pipeline.log
 ├── salmon/
-│   └── <Sample_ID>/
-│       ├── quant.sf               ← transcript-level quantification (TPM + counts)
-│       ├── quant.genes.sf         ← gene-level summary
-│       └── aux_info/              ← bias models, mapping rate stats
+│   └── <Sample_ID>/quant.sf
 ├── deseq2/
-│   ├── DESeq2_summary.csv         ← sig-gene counts across all comparisons/donors
-│   └── <Donor_ID>/
-│       └── <CompLabel>_<DonorID>_deseq2_out.csv
+│   ├── DESeq2_summary.csv
+│   └── donor_<N>/
+│       ├── ABS201_vs_IgG_donor<N>_deseq2_out.csv
+│       ├── IgGPRL_vs_IgG_donor<N>_deseq2_out.csv
+│       └── ABS201PRL_vs_IgGPRL_donor<N>_deseq2_out.csv
 └── gsea/
-    └── <Donor_ID>/
+    └── donor_<N>/
         └── <CompLabel>/
-            ├── <CompLabel>_<DonorID>.rnk
-            └── <CompLabel>_<DonorID>.GseaPreranked.<timestamp>/
-                ├── gsea_report_for_na_pos_*.html
-                ├── gsea_report_for_na_neg_*.html
-                └── index.html
+            └── index.html    ← open in browser
 ```
 
 ---
 
-## DESeq2 Output Columns
+## Common Errors
 
-| Column | Description |
-|--------|-------------|
-| `gene_id` | Ensembl gene ID |
-| `gene_name` | Gene symbol from Ensembl annotation via tximeta |
-| `baseMean` | Mean normalized count across both samples |
-| `log2FoldChange` | Treatment vs control (positive = upregulated in treatment) |
-| `lfcSE` | Standard error of log2FoldChange |
-| `stat` | Wald statistic — also used as GSEA ranking metric |
-| `pvalue` | Nominal Wald test p-value |
-| `padj` | Benjamini-Hochberg adjusted p-value |
-| `significant` | `TRUE` if padj < 0.05 and \|log2FoldChange\| ≥ 1 |
-
----
-
-## Method Notes
-
-**Why Salmon instead of featureCounts or HTSeq?**
-Salmon uses quasi-mapping and expectation-maximization to probabilistically assign reads across all compatible transcripts, preserving isoform-level information that read-counting approaches discard. GC and sequence-specific bias correction are enabled by default. Bootstrapped quantification uncertainty estimates are also generated and can be used for downstream sleuth or swish analyses.
-
-**Why per-donor/replicate instead of pooled?**
-When donors, animals, or cell lines are biologically distinct individuals, pooling them as replicates treats inter-individual variation as within-group noise and inflates false positives. Running each independently lets you assess the consistency of findings across individuals — a much stronger basis for biological conclusions. For experiments with true technical replicates of the same biological source, set `PER_DONOR="false"` in `config.sh` to pool normally.
-
-**DESeq2 with n=2 (one treatment + one control per donor):**
-The pipeline uses `fitType="local"` and `useT=TRUE` for robust dispersion estimation at small sample sizes, and disables `independentFiltering` which requires replicates to be meaningful. For experiments with ≥3 samples per group, these settings are relaxed automatically.
-
-**GSEA ranking metric:** DESeq2 Wald statistic — signed (direction-aware), continuous, and handles ties better than fold change alone.
+| Error | Fix |
+|-------|-----|
+| `chmod: Operation not permitted` | Use `bash script.sh` not `./script.sh` |
+| `COMPARISONS is empty` | Use `COMPARISONS_STR` string, not a bash array |
+| `Error reading FASTA/Q stream` | Copy FASTQs to `~/fastq_data/` not `/mnt/c/` |
+| `Is a directory` on FASTQ | Use `-mindepth 2` in find — files nested in same-named folders |
+| `locale::facet error` | Run `sudo locale-gen en_US.UTF-8` then rebuild Salmon index |
+| Salmon stalled for hours | Normal — 100 bootstraps = 1-2 hrs/sample. Reduce to 10 for testing |
+| `conda: command not found` | Run `source ~/.bashrc` after Miniconda install |
+| `CondaToSNonInteractiveError` | Run `conda tos accept` commands before installing packages |
 
 ---
 
-## Dependencies
+## Repository Structure
 
-| Tool | Minimum version | Purpose |
-|------|----------------|---------|
-| [Salmon](https://github.com/COMBINE-lab/salmon) | 1.10 | Transcript quantification |
-| R | 4.2 | Statistical analysis |
-| DESeq2 | 1.38 | Differential expression |
-| tximeta | 1.16 | Transcript → gene aggregation |
-| Java | 11 | GSEA CLI runtime |
-| Python | 3.9 | Pipeline orchestration |
-| pandas | latest | Data manipulation |
-
-### Install R packages
-
-```r
-if (!requireNamespace("BiocManager", quietly=TRUE))
-    install.packages("BiocManager")
-BiocManager::install(c("DESeq2", "tximeta", "tximport", "GenomicFeatures"))
-install.packages(c("jsonlite", "ggplot2", "ggrepel", "pheatmap"))
 ```
-
-All dependencies are installed automatically in GitHub Codespaces — see `.devcontainer/`.
-
----
-
-## Running on Seven Bridges
-
-See [`docker/Dockerfile`](docker/Dockerfile) for a container image with all dependencies pre-installed, suitable for use as a custom tool in the Seven Bridges Workflow Editor.
-
-For batch job submission via the SB Python API, see [`scripts/sb_submit.py`](scripts/sb_submit.py).
-The script reads your `config.sh` comparisons and samplesheet, then submits one task per `(Donor_ID, CompLabel)` pair programmatically — no manual clicking required.
+DEseq-2-and-GSEA-analysis/
+├── README.md
+├── docs/
+│   └── RNAseq_MultiPlatform_Setup_Guide.docx
+├── config/
+│   ├── config.template.sh
+│   └── config.sh                  ← gitignored
+├── pipeline/
+│   └── rnaseq_pipeline_salmon.sh
+├── r_scripts/
+│   └── run_deseq2_salmon.R
+├── python_scripts/
+│   └── make_rnk.py
+├── scripts/
+│   └── organize_fastqs.py
+├── samplesheets/
+│   ├── samplesheet_template.csv
+│   └── diversity_samplesheet.csv
+└── results/                       ← gitignored
+```
 
 ---
 
 ## Reproducibility
 
-When publishing or sharing results, record the exact pipeline version used:
+Record the pipeline version used for published analyses:
 
 ```bash
 git rev-parse HEAD
 ```
 
-Include this commit hash alongside the tool versions (logged automatically to `results/pipeline.log`) in your methods section or electronic lab notebook.
-
----
-
-## Contributing
-
-Pull requests are welcome. Please open an issue first to discuss proposed changes to core pipeline logic. For bug reports, include the relevant section of `results/pipeline.log`.
+Include this commit hash alongside tool versions (logged to `results/pipeline.log`) in your methods section.
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT
